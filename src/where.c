@@ -1177,13 +1177,20 @@ static sqlite3_index_info *allocateIndexInfo(
     assert( pTerm->u.x.leftColumn<pTab->nCol );
 
     /* tag-20191211-002: WHERE-clause constraints are not useful to the
-    ** right-hand table of a LEFT JOIN nor to the left-hand table of a
+    ** right-hand table of a LEFT JOIN nor to the either table of a
     ** RIGHT JOIN.  See tag-20191211-001 for the
     ** equivalent restriction for ordinary tables. */
-    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-     && !ExprHasProperty(pTerm->pExpr, EP_OuterON)
-    ){
-      continue;
+    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_RIGHT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+      if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+       || pTerm->pExpr->w.iJoin != pSrc->iCursor
+      ){
+        continue;
+      }
     }
     nTerm++;
     pTerm->wtFlags |= TERM_OK;
@@ -2833,12 +2840,25 @@ static int whereLoopAddBtreeIndex(
 
     /* tag-20191211-001:  Do not allow constraints from the WHERE clause to
     ** be used by the right table of a LEFT JOIN nor by the left table of a
-    ** RIGHT JOIN.  Only constraints in the
-    ** ON clause are allowed.  See tag-20191211-002 for the vtab equivalent. */
-    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-     && !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
-    ){
-      continue;
+    ** RIGHT JOIN.  Only constraints in the ON clause are allowed.
+    ** See tag-20191211-002 for the vtab equivalent.  
+    **
+    ** 2022-06-06: See https://sqlite.org/forum/forumpost/206d99a16dd9212f
+    ** for an example of a WHERE clause constraints that may not be used on
+    ** the right table of a RIGHT JOIN because the constraint implies a
+    ** not-NULL condition on the left table of the RIGHT JOIN.
+    */
+    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_RIGHT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) )
+      testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+      if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+       || pTerm->pExpr->w.iJoin != pSrc->iCursor
+      ){
+        continue;
+      }
     }
 
     if( IsUniqueIndex(pProbe) && saved_nEq==pProbe->nKeyCol-1 ){
@@ -3190,15 +3210,18 @@ static int indexMightHelpWithOrderBy(
 */
 static int whereUsablePartialIndex(
   int iTab,             /* The table for which we want an index */
-  int isLeft,           /* True if iTab is the right table of a LEFT JOIN */
+  u8 jointype,          /* The JT_* flags on the join */
   WhereClause *pWC,     /* The WHERE clause of the query */
   Expr *pWhere          /* The WHERE clause from the partial index */
 ){
   int i;
   WhereTerm *pTerm;
-  Parse *pParse = pWC->pWInfo->pParse;
+  Parse *pParse;
+
+  if( jointype & JT_LTORJ ) return 0;
+  pParse = pWC->pWInfo->pParse;
   while( pWhere->op==TK_AND ){
-    if( !whereUsablePartialIndex(iTab,isLeft,pWC,pWhere->pLeft) ) return 0;
+    if( !whereUsablePartialIndex(iTab,jointype,pWC,pWhere->pLeft) ) return 0;
     pWhere = pWhere->pRight;
   }
   if( pParse->db->flags & SQLITE_EnableQPSG ) pParse = 0;
@@ -3206,7 +3229,7 @@ static int whereUsablePartialIndex(
     Expr *pExpr;
     pExpr = pTerm->pExpr;
     if( (!ExprHasProperty(pExpr, EP_OuterON) || pExpr->w.iJoin==iTab)
-     && (isLeft==0 || ExprHasProperty(pExpr, EP_OuterON))
+     && ((jointype & JT_OUTER)==0 || ExprHasProperty(pExpr, EP_OuterON))
      && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab)
      && (pTerm->wtFlags & TERM_VNULL)==0
     ){
@@ -3372,9 +3395,8 @@ static int whereLoopAddBtree(
   for(; rc==SQLITE_OK && pProbe; 
       pProbe=(pSrc->fg.isIndexedBy ? 0 : pProbe->pNext), iSortIdx++
   ){
-    int isLeft = (pSrc->fg.jointype & JT_OUTER)!=0;
     if( pProbe->pPartIdxWhere!=0
-     && !whereUsablePartialIndex(pSrc->iCursor, isLeft, pWC,
+     && !whereUsablePartialIndex(pSrc->iCursor, pSrc->fg.jointype, pWC,
                                  pProbe->pPartIdxWhere)
     ){
       testcase( pNew->iTab!=pSrc->iCursor );  /* See ticket [98d973b8f5] */
@@ -6034,6 +6056,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
   SrcList *pTabList = pWInfo->pTabList;
   sqlite3 *db = pParse->db;
   int iEnd = sqlite3VdbeCurrentAddr(v);
+  int nRJ = 0;
 
   /* Generate loop termination code.
   */
@@ -6050,8 +6073,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       pRJ->endSubrtn = sqlite3VdbeCurrentAddr(v);
       sqlite3VdbeAddOp3(v, OP_Return, pRJ->regReturn, pRJ->addrSubrtn, 1);
       VdbeCoverage(v);
-      assert( pParse->withinRJSubrtn>0 );
-      pParse->withinRJSubrtn--;
+      nRJ++;
     }
     pLoop = pLevel->pWLoop;
     if( pLevel->op!=OP_Noop ){
@@ -6332,5 +6354,6 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
   */
   pParse->nQueryLoop = pWInfo->savedNQueryLoop;
   whereInfoFree(db, pWInfo);
+  pParse->withinRJSubrtn -= nRJ;
   return;
 }

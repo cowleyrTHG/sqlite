@@ -2193,10 +2193,11 @@ int sqlite3ColumnsFromExprList(
       }
       if( pColExpr->op==TK_COLUMN
        && ALWAYS( ExprUseYTab(pColExpr) )
-       && (pTab = pColExpr->y.pTab)!=0
+       && ALWAYS( pColExpr->y.pTab!=0 )
       ){
         /* For columns use the column name name */
         int iCol = pColExpr->iColumn;
+        pTab = pColExpr->y.pTab;
         if( iCol<0 ) iCol = pTab->iPKey;
         zName = iCol>=0 ? pTab->aCol[iCol].zCnName : "rowid";
       }else if( pColExpr->op==TK_ID ){
@@ -3762,9 +3763,10 @@ static Expr *substExpr(
   Expr *pExpr            /* Expr in which substitution occurs */
 ){
   if( pExpr==0 ) return 0;
-  if( ExprHasProperty(pExpr, EP_OuterON)
+  if( ExprHasProperty(pExpr, EP_OuterON|EP_InnerON)
    && pExpr->w.iJoin==pSubst->iTable
   ){
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
     pExpr->w.iJoin = pSubst->iNewTable;
   }
   if( pExpr->op==TK_COLUMN
@@ -3809,6 +3811,11 @@ static Expr *substExpr(
         }
         sqlite3ExprDelete(db, pExpr);
         pExpr = pNew;
+        if( pExpr->op==TK_TRUEFALSE ){
+          pExpr->u.iValue = sqlite3ExprTruthValue(pExpr);
+          pExpr->op = TK_INTEGER;
+          ExprSetProperty(pExpr, EP_IntValue);
+        }
 
         /* Ensure that the expression now has an implicit collation sequence,
         ** just as it did when it was a column of a view or sub-query. */
