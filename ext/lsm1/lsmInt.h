@@ -985,7 +985,7 @@ int lsmStrlen(const char *zName);
 ** Round up a number to the next larger multiple of 8.  This is used
 ** to force 8-byte alignment on 64-bit architectures.
 */
-#define ROUND8(x)     (((x)+7)&~7)
+#define ROUND8(x)     (((x)+(sizeof(void *) - 1))&~(sizeof(void *) - 1))
 
 #define LSM_MIN(x,y) ((x)>(y) ? (y) : (x))
 #define LSM_MAX(x,y) ((x)>(y) ? (x) : (y))

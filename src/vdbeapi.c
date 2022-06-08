@@ -1127,7 +1127,7 @@ static const Mem *columnNullValue(void){
   ** __attribute__((aligned(8))) macro.  */
   static const Mem nullMem 
 #if defined(SQLITE_DEBUG) && defined(__GNUC__)
-    __attribute__((aligned(8))) 
+    __attribute__((aligned(sizeof(void *)))) 
 #endif
     = {
         /* .u          = */ {0},

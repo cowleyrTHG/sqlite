@@ -946,17 +946,17 @@ typedef INT16_TYPE LogEst;
 ** pointers in size, and so it is a no-op on systems where the pointer
 ** size is 8.
 */
-#define ROUND8(x)     (((x)+7)&~7)
-#if SQLITE_PTRSIZE==8
-# define ROUND8P(x)   (x)
+#define ROUND8(x)     (((x)+(sizeof(void *) - 1))&~(sizeof(void *) - 1))
+#if SQLITE_PTRSIZE==16
+# define ROUND8P(x)   (((x)+(sizeof(void *) - 1))&~(sizeof(void *) - 1))
 #else
-# define ROUND8P(x)   (((x)+7)&~7)
+# define ROUND8P(x)   (((x)+(sizeof(void *) - 1))&~(sizeof(void *) - 1))
 #endif
 
 /*
 ** Round down to the nearest multiple of 8
 */
-#define ROUNDDOWN8(x) ((x)&~7)
+#define ROUNDDOWN8(x) ((x)&~(sizeof(void *) - 1))
 
 /*
 ** Assert that the pointer X is aligned to an 8-byte boundary.  This
@@ -970,7 +970,7 @@ typedef INT16_TYPE LogEst;
 #ifdef SQLITE_4_BYTE_ALIGNED_MALLOC
 # define EIGHT_BYTE_ALIGNMENT(X)   ((((char*)(X) - (char*)0)&3)==0)
 #else
-# define EIGHT_BYTE_ALIGNMENT(X)   ((((char*)(X) - (char*)0)&7)==0)
+# define EIGHT_BYTE_ALIGNMENT(X)   ((((char*)(X) - (char*)0)&(sizeof(void *) - 1))==0)
 #endif
 
 /*

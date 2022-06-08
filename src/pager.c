@@ -112,7 +112,7 @@
 /*
 ** Macros for troubleshooting.  Normally turned off
 */
-#if 0
+#if 1
 int sqlite3PagerTrace=1;  /* True to enable tracing */
 #define sqlite3DebugPrintf printf
 #define PAGERTRACE(X)     if( sqlite3PagerTrace ){ sqlite3DebugPrintf X; }

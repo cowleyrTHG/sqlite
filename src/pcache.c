@@ -62,8 +62,8 @@ struct PCache {
 ** When sqlite3PcacheTrace is 2, a dump of the pcache showing all cache entries
 ** is displayed for many operations, resulting in a lot of output.
 */
-#if defined(SQLITE_DEBUG) && 0
-  int sqlite3PcacheTrace = 2;       /* 0: off  1: simple  2: cache dumps */
+#if defined(SQLITE_DEBUG) && 1
+  int sqlite3PcacheTrace = 1;       /* 0: off  1: simple  2: cache dumps */
   int sqlite3PcacheMxDump = 9999;   /* Max cache entries for pcacheDump() */
 # define pcacheTrace(X) if(sqlite3PcacheTrace){sqlite3DebugPrintf X;}
   void pcacheDump(PCache *pCache){

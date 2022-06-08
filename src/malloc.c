@@ -290,6 +290,12 @@ void *sqlite3Malloc(u64 n){
   }else{
     p = sqlite3GlobalConfig.m.xMalloc((int)n);
   }
+
+  if (EIGHT_BYTE_ALIGNMENT(p))
+  {
+	  assert(EIGHT_BYTE_ALIGNMENT(p));
+  }
+
   assert( EIGHT_BYTE_ALIGNMENT(p) );  /* IMP: R-11148-40995 */
   return p;
 }

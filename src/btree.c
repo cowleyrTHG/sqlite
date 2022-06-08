@@ -25,7 +25,7 @@ static const char zMagicHeader[] = SQLITE_FILE_HEADER;
 ** Set this global variable to 1 to enable tracing using the TRACE
 ** macro.
 */
-#if 0
+#if 1
 int sqlite3BtreeTrace=1;  /* True to enable tracing */
 # define TRACE(X)  if(sqlite3BtreeTrace){printf X;fflush(stdout);}
 #else
@@ -2635,7 +2635,7 @@ int sqlite3BtreeOpen(
     rc = sqlite3PagerSetPagesize(pBt->pPager, &pBt->pageSize, nReserve);
     if( rc ) goto btree_open_out;
     pBt->usableSize = pBt->pageSize - nReserve;
-    assert( (pBt->pageSize & 7)==0 );  /* 8-byte alignment of pageSize */
+    assert( (pBt->pageSize &(sizeof(void *) - 1))==0 );  /* 8-byte alignment of pageSize */
    
 #if !defined(SQLITE_OMIT_SHARED_CACHE) && !defined(SQLITE_OMIT_DISKIO)
     /* Add the new BtShared object to the linked list sharable BtShareds.

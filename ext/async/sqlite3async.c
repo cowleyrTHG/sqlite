@@ -41,7 +41,7 @@ typedef struct AsyncFileLock AsyncFileLock;
 typedef struct AsyncLock AsyncLock;
 
 /* Enable for debugging */
-#ifndef NDEBUG
+#if 1
 #include <stdio.h>
 static int sqlite3async_trace = 0;
 # define ASYNC_TRACE(X) if( sqlite3async_trace ) asyncTrace X
